@@ -2,6 +2,8 @@ import pandas as pd
 import pandera as pa
 import requests
 import os
+import pymysql
+from pymysql import Error
 from pathlib import Path
 from VALIDACION_DATOS import esquema
 
@@ -64,7 +66,6 @@ def extraer_datos():
         print(f'Error en la validación de datos para la columna: {columna}')
 
 
-
 def transformar_datos():
     global df_global
     
@@ -96,9 +97,113 @@ def transformar_datos():
     else:
         print('Las columnas del archivo no poseen nulos y/o duplicados.')
     
+
+def cargar_datos():
     
+    global df_global
+    
+    try:       
+        conexion = pymysql.connect(
+            host='localhost',
+            user='root',
+            password='Lisandrotorre478-',  
+            database='supermercadosargentina'
+        )        
+        cursor = conexion.cursor()
+        
+        print('Intentando crear la tabla...')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS ventas(
+                indice_tiempo DATE,
+                ventas_precios_corrientes INT,
+                ventas_precios_constantes INT,
+                ventas_totales_canal_venta INT, 
+                salon_ventas INT,
+                canales_on_line INT,
+                ventas_totales_medio_pago INT,
+                efectivo INT,
+                tarjetas_debito INT,
+                tarjetas_credito INT,
+                otros_medios INT,
+                ventas_totales_grupo_articulos INT,
+                subtotal_ventas_alimentos_bebidas INT,
+                bebidas INT,
+                almacen INT,
+                panaderia INT,
+                lacteos INT,
+                carnes INT,
+                verduleria_fruteria INT,
+                alimentos_preparados_rotiseria INT,
+                articulos_limpieza_perfumeria INT,
+                indumentaria_calzado_textiles_hogar INT,
+                electronicos_articulos_hogar INT,
+                otros INT
+            )
+        ''')
+        print('Tabla creada/existente.')
+        
+        print('Cargando datos a la tabla...')
+
+        for i, row in df_global.iterrows():
+            try:
+                sql = '''
+                INSERT INTO ventas (
+                    indice_tiempo, 
+                    ventas_precios_corrientes, 
+                    ventas_precios_constantes,
+                    ventas_totales_canal_venta, 
+                    salon_ventas, 
+                    canales_on_line, 
+                    ventas_totales_medio_pago,
+                    efectivo, 
+                    tarjetas_debito, 
+                    tarjetas_credito,
+                    otros_medios, 
+                    ventas_totales_grupo_articulos, 
+                    subtotal_ventas_alimentos_bebidas, 
+                    bebidas, 
+                    almacen,
+                    panaderia, 
+                    lacteos, 
+                    carnes, 
+                    verduleria_fruteria,
+                    alimentos_preparados_rotiseria, 
+                    articulos_limpieza_perfumeria, 
+                    indumentaria_calzado_textiles_hogar,
+                    electronicos_articulos_hogar, 
+                    otros
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                '''
+                cursor.execute(sql, tuple(row))
+            except Error as e:
+                print(f'Error al insertar fila {i}: {e}')
+            
+        conexion.commit()
+        print(f'Datos insertados correctamente en la tabla.')
+        
+    except Error as e:
+        print(f'Error al cargar los datos: {e}')
+    
+    finally:
+        if conexion.open:
+            cursor.close()
+            conexion.close()
+            print('Conexión cerrada.')
+    
+        
+ # PENDIENTE ---->  - INFORMARME QUE HACE Y LA FUNCIONALIDAD DE BLOQUE "FINALLY"
+ #                  - CARGA INCREMENTAL (AL EJECUTAR VARIAS VECES EL SCRIPT, LAS FILAS EN MYSQL SE VAN MULTIPLICANDO)
+
+
+
+
+        
+        
+
 
            
 if __name__ == '__main__':      
     extraer_datos()
     transformar_datos()
+    cargar_datos()
