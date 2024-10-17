@@ -5,7 +5,7 @@ import os
 import pymysql
 from pymysql import Error
 from pathlib import Path
-from VALIDACION_DATOS import esquema
+from VALIDACION_DATOS import esquema_extraccion, esquema_carga
 
 df_global = None
 
@@ -42,7 +42,7 @@ def extraer_datos():
     # Obtener los nombres de las columnas actuales del DataFrame
     columnas_actuales = set(df_global.columns)
     # Obtener los nombres de las columnas esperadas según el esquema de validación
-    columnas_esperadas = set(esquema['ventas_supermercados'].columns.keys())
+    columnas_esperadas = set(esquema_extraccion['ventas_supermercados'].columns.keys())
     
     # Determinar si hay nuevas columnas en el DataFrame que no están en el esquema
     nuevas_columnas = columnas_actuales - columnas_esperadas
@@ -56,14 +56,14 @@ def extraer_datos():
             # Crear un DataFrame con una sola columna para la validación
             df_columnas = df_global[[columna]]
             # Definir el esquema de validación para la columna específica
-            esquema_columnas = pa.DataFrameSchema({columna: esquema['ventas_supermercados'].columns[columna]})
+            esquema_columnas = pa.DataFrameSchema({columna: esquema_extraccion['ventas_supermercados'].columns[columna]})
             # Validar la columna usando Pandera
             esquema_columnas.validate(df_columnas)
             # Imprimir detalles de la validación exitosa de la columna
             print(f'La validación de datos para la columna "{columna}" fue exitosa. \n - Tipo Dato: {df_global[columna].dtype} \n - Cantidad Nulos: {df_global[columna].isnull().sum()}')
     except pa.errors.SchemaError as e:
         # Imprimir un mensaje de error si la validación falla para alguna columna
-        print(f'Error en la validación de datos para la columna: {columna}')
+        print(f'ERROR EN LA VALIDACIÓN DE DATOS PARA LA COLUMNA: {columna}')
 
 
 def transformar_datos():
@@ -76,6 +76,33 @@ def transformar_datos():
     
     # Se modifica el tipo de dato de la columna "indice_tiempo"
     df_global['indice_tiempo'] = pd.to_datetime(df_global['indice_tiempo'])
+    # Lista de columnas a convertir a enteros para aún mejor visualización.
+    columnas_convertir = ['ventas_precios_corrientes',
+    'ventas_precios_constantes',
+    'ventas_totales_canal_venta',
+    'salon_ventas',
+    'canales_on_line',
+    'ventas_totales_medio_pago',
+    'efectivo',
+    'tarjetas_debito',
+    'tarjetas_credito',
+    'otros_medios',
+    'ventas_totales_grupo_articulos',
+    'subtotal_ventas_alimentos_bebidas',
+    'bebidas',
+    'almacen',
+    'panaderia',
+    'lacteos',
+    'carnes',
+    'verduleria_fruteria',
+    'alimentos_preparados_rotiseria',
+    'articulos_limpieza_perfumeria',
+    'indumentaria_calzado_textiles_hogar',
+    'electronicos_articulos_hogar',
+    'otros']
+
+    for nombre_columna in columnas_convertir:
+        df_global[nombre_columna] = df_global[nombre_columna].astype(int)
     
      # Selecciona columnas numéricas
     columnas_numericas = df_global.select_dtypes(include=['number']).columns
@@ -102,6 +129,15 @@ def cargar_datos():
     
     global df_global
     
+    
+    try: 
+        df_global = esquema_carga.validate(df_global)
+        print('Validación de datos para "carga" exitosa.')
+    except pa.errors.SchemaError as e:
+        print(f'ERROR EN LA VALIDACIÓN DE DATOS PARA "CARGA": {e}') 
+        
+    
+    
     try:       
         conexion = pymysql.connect(
             host='localhost',
@@ -115,6 +151,7 @@ def cargar_datos():
         
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS ventas(
+                id INT AUTO_INCREMENT PRIMARY KEY,
                 indice_tiempo DATE,
                 ventas_precios_corrientes INT,
                 ventas_precios_constantes INT,
@@ -138,7 +175,8 @@ def cargar_datos():
                 articulos_limpieza_perfumeria INT,
                 indumentaria_calzado_textiles_hogar INT,
                 electronicos_articulos_hogar INT,
-                otros INT
+                otros INT,
+                UNIQUE(indice_tiempo)
             )
         ''')
         print('Tabla creada/existente.')
@@ -148,7 +186,7 @@ def cargar_datos():
         for i, row in df_global.iterrows():
             try:
                 sql = '''
-                INSERT INTO ventas (
+                INSERT IGNORE INTO ventas (
                     indice_tiempo, 
                     ventas_precios_corrientes, 
                     ventas_precios_constantes,
@@ -177,13 +215,13 @@ def cargar_datos():
                 '''
                 cursor.execute(sql, tuple(row))
             except Error as e:
-                print(f'Error al insertar fila {i}: {e}')
+                print(f'ERROR AL INSERTAR FILA: {i}: {e}')
             
         conexion.commit()
         print(f'Datos insertados correctamente en la tabla.')
         
     except Error as e:
-        print(f'Error al cargar los datos: {e}')
+        print(f'ERROR AL CARGAR LOS DATOS: {e}')
     
     finally:
         if conexion.open:
@@ -194,14 +232,6 @@ def cargar_datos():
         
  # PENDIENTE ---->  - INFORMARME QUE HACE Y LA FUNCIONALIDAD DE BLOQUE "FINALLY"
  #                  - CARGA INCREMENTAL (AL EJECUTAR VARIAS VECES EL SCRIPT, LAS FILAS EN MYSQL SE VAN MULTIPLICANDO)
-
-
-
-
-        
-        
-
-
            
 if __name__ == '__main__':      
     extraer_datos()
